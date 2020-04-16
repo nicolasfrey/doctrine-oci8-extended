@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -14,31 +16,30 @@ namespace Doctrine\DBAL\Driver\OCI8Ext;
 use Doctrine\DBAL\Driver\OCI8\OCI8Connection as BaseConnection;
 
 /**
- * Class OCI8Connection
+ * Class OCI8Connection.
  *
- * @package Doctrine\DBAL\Driver\OCI8Ext
  * @author  Jason Hofer <jason.hofer@gmail.com>
  * 2018-02-21 7:56 PM
  */
 class OCI8Connection extends BaseConnection
 {
     /**
-     * @param string $prepareString
+     * @param resource $sth
      *
-     * @return OCI8Statement
+     * @return OCI8Cursor<array>
      */
-    public function prepare($prepareString) : OCI8Statement
+    public function newCursor($sth = null): OCI8Cursor
     {
-        return new OCI8Statement($this->dbh, $prepareString, $this);
+        return new OCI8Cursor($this->dbh, $this, $sth);
     }
 
     /**
-     * @param resource $sth
+     * @param string $prepareString
      *
-     * @return OCI8Cursor
+     * @return OCI8Statement<array>
      */
-    public function newCursor($sth = null) : OCI8Cursor
+    public function prepare($prepareString): OCI8Statement
     {
-        return new OCI8Cursor($this->dbh, $this, $sth);
+        return new OCI8Statement($this->dbh, $prepareString, $this);
     }
 }

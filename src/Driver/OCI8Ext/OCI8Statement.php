@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -15,14 +17,9 @@ use Doctrine\DBAL\Driver\OCI8\OCI8Statement as BaseStatement;
 use Doctrine\DBAL\ParameterType;
 use LogicException;
 use PDO;
-use const OCI_B_BLOB;
-use const OCI_B_CLOB;
-use const OCI_B_CURSOR;
-use const OCI_BOTH;
-use const SQLT_CHR;
+
 use function array_map;
 use function count;
-use function func_num_args;
 use function is_array;
 use function is_numeric;
 use function is_resource;
@@ -30,17 +27,33 @@ use function max;
 use function oci_bind_array_by_name;
 use function oci_bind_by_name;
 use function reset;
-use function strtolower;
+
+use const OCI_B_BLOB;
+use const OCI_B_CLOB;
+use const OCI_B_CURSOR;
+use const OCI_BOTH;
+use const SQLT_AFC;
+use const SQLT_CHR;
+use const SQLT_INT;
 
 /**
- * Class OCI8Statement
+ * Class OCI8Statement.
  *
- * @package Doctrine\DBAL\Driver\OCI8Ext
  * @author  Jason Hofer <jason.hofer@gmail.com>
  * 2018-02-21 7:54 PM
  */
 class OCI8Statement extends BaseStatement
 {
+    /**
+     * @var bool
+     */
+    protected $checkedForCursorFields = false;
+
+    /**
+     * @var string[]
+     */
+    protected $cursorFields = [];
+
     /**
      * Holds references to bound parameter values.
      *
@@ -48,22 +61,9 @@ class OCI8Statement extends BaseStatement
      *
      * @see \Doctrine\DBAL\Driver\OCI8\OCI8Statement::$boundValues
      *
-     * @var array
+     * @var string[]
      */
     private $references = [];
-
-    /** @var array */
-    protected $cursorFields = [];
-
-    /** @var bool */
-    protected $checkedForCursorFields = false;
-
-    /**
-     * Used because parent::fetchAll() calls $this->fetch().
-     *
-     * @var bool
-     */
-    private $returningResources = false;
 
     /**
      * Used because parent::fetchAll() calls $this->fetch().
@@ -73,27 +73,19 @@ class OCI8Statement extends BaseStatement
     private $returningCursors = false;
 
     /**
-     * {@inheritdoc}
+     * Used because parent::fetchAll() calls $this->fetch().
      *
-     * @throws LogicException
+     * @var bool
      */
-    public function bindValue($param, $value, $type = ParameterType::STRING) : bool
-    {
-        [$type, $ociType] = $this->normalizeType($type);
-
-        if (PDO::PARAM_STMT === $type || OCI_B_CURSOR === $ociType) {
-            throw new LogicException('You must call "bindParam()" to bind a cursor.');
-        }
-
-        return parent::bindValue($param, $value, $type);
-    }
+    private $returningResources = false;
 
     /** @noinspection MoreThanThreeArgumentsInspection */
     /** @noinspection PhpHierarchyChecksInspection */
+
     /**
      * {@inheritdoc}
      */
-    public function bindParam($column, &$variable, $type = ParameterType::STRING, $length = null) : bool
+    public function bindParam($column, &$variable, $type = ParameterType::STRING, $length = null): bool
     {
         $origCol = $column;
 
@@ -105,7 +97,7 @@ class OCI8Statement extends BaseStatement
         // Type: Cursor.
         if (PDO::PARAM_STMT === $type || OCI_B_CURSOR === $ociType) {
             /** @var OCI8Connection $conn Because my IDE complains. */
-            $conn     = $this->_conn;
+            $conn = $this->_conn;
             $variable = $conn->newCursor();
 
             return $this->bindByName($column, $variable->_sth, -1, OCI_B_CURSOR);
@@ -143,62 +135,20 @@ class OCI8Statement extends BaseStatement
         return parent::bindParam($origCol, $variable, $type, $length);
     }
 
-    /** @noinspection MoreThanThreeArgumentsInspection */
     /**
-     * @param string $column
-     * @param mixed  $variable
-     * @param int    $maxLength
-     * @param int    $type
+     * {@inheritdoc}
      *
-     * @return bool
+     * @throws LogicException
      */
-    protected function bindByName($column, &$variable, $maxLength = -1, $type = SQLT_CHR) : bool
+    public function bindValue($param, $value, $type = ParameterType::STRING): bool
     {
-        // For PHP 7's OCI8 extension (prevents garbage collection).
-        $this->references[$column] =& $variable;
+        [$type, $ociType] = $this->normalizeType($type);
 
-        return oci_bind_by_name($this->_sth, $column, $variable, $maxLength, $type);
-    }
-
-    /** @noinspection MoreThanThreeArgumentsInspection */
-    /**
-     * @param string $column
-     * @param mixed  $variable
-     * @param int    $maxTableLength
-     * @param int    $maxItemLength
-     * @param int    $type
-     *
-     * @return bool
-     */
-    protected function bindArrayByName($column, &$variable, $maxTableLength, $maxItemLength = -1, $type = SQLT_AFC) : bool
-    {
-        // For PHP 7's OCI8 extension (prevents garbage collection).
-        $this->references[$column] =& $variable;
-
-        return oci_bind_array_by_name($this->_sth, $column, $variable, $maxTableLength, $maxItemLength, $type);
-    }
-
-    /**
-     * @param int|string $type
-     *
-     * @return array
-     */
-    protected function normalizeType($type) : array
-    {
-        $ociType = null;
-
-        // Figure out the type.
-        if (is_numeric($type)) {
-            $type = (int) $type;
-            if (OCI8::isParamConstant($type)) {
-                $ociType = OCI8::decodeParamConstant($type);
-            }
-        } elseif ('cursor' === strtolower($type)) {
-            $type    = PDO::PARAM_STMT;
-            $ociType = OCI_B_CURSOR;
+        if (PDO::PARAM_STMT === $type || OCI_B_CURSOR === $ociType) {
+            throw new LogicException('You must call "bindParam()" to bind a cursor.');
         }
 
-        return [$type, $ociType];
+        return parent::bindValue($param, $value, $type);
     }
 
     /**
@@ -244,7 +194,7 @@ class OCI8Statement extends BaseStatement
             !$this->returningResources &&
             $results &&
             is_array($results) &&
-            self::$fetchModeMap[$fetchMode] !== OCI_BOTH // handled by $this->fetch() in parent::fetchAll().
+            OCI_BOTH !== self::$fetchModeMap[$fetchMode] // handled by $this->fetch() in parent::fetchAll().
         ) {
             if (PDO::FETCH_COLUMN !== $fetchMode) {
                 foreach ($results as &$row) {
@@ -259,18 +209,21 @@ class OCI8Statement extends BaseStatement
         }
 
         $this->returningResources =
-        $this->returningCursors   = false;
+        $this->returningCursors = false;
         $this->resetCursorFields();
 
         return $results;
     }
 
     /**
-     * {@inheritdoc}
+     * @param int $columnIndex
+     * @param int|null $fetchMode
      *
      * @throws \Doctrine\DBAL\Driver\OCI8\OCI8Exception
+     *
+     * @return false|mixed
      */
-    public function fetchColumn($columnIndex = 0, $fetchMode = null)
+    public function fetchColumn($columnIndex = 0, ?int $fetchMode = null)
     {
         [
             $fetchMode,
@@ -278,7 +231,6 @@ class OCI8Statement extends BaseStatement
             $returnCursors
         ] = $this->processFetchMode($fetchMode);
 
-        /** @var array|bool|null|string|resource $columnValue */
         $columnValue = parent::fetchColumn($columnIndex);
 
         if (!$returnResources && is_resource($columnValue)) {
@@ -288,6 +240,48 @@ class OCI8Statement extends BaseStatement
         return $columnValue;
     }
 
+    /** @noinspection MoreThanThreeArgumentsInspection */
+
+    /**
+     * @param string $column
+     * @param mixed  $variable
+     * @param int    $maxTableLength
+     * @param int    $maxItemLength
+     * @param int    $type
+     *
+     * @return bool
+     */
+    protected function bindArrayByName(
+        $column,
+        &$variable,
+        $maxTableLength,
+        $maxItemLength = -1,
+        $type = SQLT_AFC
+    ): bool {
+        // For PHP 7's OCI8 extension (prevents garbage collection).
+        $this->references[$column] = &$variable;
+
+        return oci_bind_array_by_name($this->_sth, $column, $variable, $maxTableLength, $maxItemLength, $type);
+    }
+
+    /** @noinspection MoreThanThreeArgumentsInspection */
+
+    /**
+     * @param string $column
+     * @param mixed  $variable
+     * @param int    $maxLength
+     * @param int    $type
+     *
+     * @return bool
+     */
+    protected function bindByName($column, &$variable, $maxLength = -1, $type = SQLT_CHR): bool
+    {
+        // For PHP 7's OCI8 extension (prevents garbage collection).
+        $this->references[$column] = &$variable;
+
+        return oci_bind_by_name($this->_sth, $column, $variable, $maxLength, $type);
+    }
+
     /**
      * @param array|mixed $row
      * @param int         $fetchMode
@@ -295,7 +289,7 @@ class OCI8Statement extends BaseStatement
      *
      * @throws \Doctrine\DBAL\Driver\OCI8\OCI8Exception
      */
-    protected function fetchCursorFields(&$row, $fetchMode, $returnCursors) : void
+    protected function fetchCursorFields(&$row, $fetchMode, $returnCursors): void
     {
         if (!is_array($row)) {
             $this->resetCursorFields();
@@ -304,49 +298,19 @@ class OCI8Statement extends BaseStatement
             $this->findCursorFields($row, $fetchMode, $returnCursors);
         } elseif ($this->cursorFields) {
             $shared = [];
+
             foreach ($this->cursorFields as $field) {
                 $key = (string) $row[$field];
+
                 if (isset($shared[$key])) {
                     $row[$field] = $shared[$key];
+
                     continue;
                 }
-                $row[$field]  =  $this->fetchCursorValue($row[$field], $fetchMode, $returnCursors);
-                $shared[$key] =& $row[$field];
+                $row[$field] = $this->fetchCursorValue($row[$field], $fetchMode, $returnCursors);
+                $shared[$key] = &$row[$field];
             }
         }
-    }
-
-    protected function resetCursorFields() : void
-    {
-        $this->cursorFields           = [];
-        $this->checkedForCursorFields = false;
-    }
-
-    /**
-     * @param array $row
-     * @param int   $fetchMode
-     * @param bool  $returnCursors
-     *
-     * @throws \Doctrine\DBAL\Driver\OCI8\OCI8Exception
-     */
-    protected function findCursorFields(array &$row, $fetchMode, $returnCursors) : void
-    {
-        $shared = [];
-        foreach ($row as $field => $value) {
-            if (!is_resource($value)) {
-                continue;
-            }
-            $this->cursorFields[] = $field;
-            $key = (string) $value;
-            if (isset($shared[$key])) {
-                $row[$field] = $shared[$key];
-                continue;
-            }
-            // We are already here, so might as well process it.
-            $row[$field]  =  $this->fetchCursorValue($row[$field], $fetchMode, $returnCursors);
-            $shared[$key] =& $row[$field];
-        }
-        $this->checkedForCursorFields = true;
     }
 
     /**
@@ -354,14 +318,14 @@ class OCI8Statement extends BaseStatement
      * @param int $fetchMode
      * @param bool $returnCursor
      *
-     * @return array|mixed|OCI8Cursor
-     *
      * @throws \Doctrine\DBAL\Driver\OCI8\OCI8Exception
+     *
+     * @return array|mixed|OCI8Cursor
      */
     protected function fetchCursorValue($resource, $fetchMode, $returnCursor)
     {
         /** @var OCI8Connection $conn Because my IDE complains. */
-        $conn   = $this->_conn;
+        $conn = $this->_conn;
         $cursor = $conn->newCursor($resource);
 
         if ($returnCursor) {
@@ -376,18 +340,79 @@ class OCI8Statement extends BaseStatement
     }
 
     /**
+     * @param mixed[] $row
+     * @param int     $fetchMode
+     * @param bool    $returnCursors
+     *
+     * @throws \Doctrine\DBAL\Driver\OCI8\OCI8Exception
+     */
+    protected function findCursorFields(array &$row, $fetchMode, $returnCursors): void
+    {
+        $shared = [];
+
+        foreach ($row as $field => $value) {
+            if (!is_resource($value)) {
+                continue;
+            }
+            $this->cursorFields[] = $field;
+            $key = (string) $value;
+
+            if (isset($shared[$key])) {
+                $row[$field] = $shared[$key];
+
+                continue;
+            }
+            // We are already here, so might as well process it.
+            $row[$field] = $this->fetchCursorValue($row[$field], $fetchMode, $returnCursors);
+            $shared[$key] = &$row[$field];
+        }
+        $this->checkedForCursorFields = true;
+    }
+
+    /**
+     * @param int|string $type
+     *
+     * @return mixed[]
+     */
+    protected function normalizeType($type): array
+    {
+        $ociType = null;
+
+        // Figure out the type.
+        if (is_numeric($type)) {
+            $type = (int) $type;
+
+            if (OCI8::isParamConstant($type)) {
+                $ociType = OCI8::decodeParamConstant($type);
+            }
+        } elseif ('cursor' === mb_strtolower($type)) {
+            $type = PDO::PARAM_STMT;
+            $ociType = OCI_B_CURSOR;
+        }
+
+        return [$type, $ociType];
+    }
+
+    /**
      * @param int  $fetchMode
      * @param bool $checkGlobal
      *
-     * @return array
+     * @return mixed[]
      */
-    protected function processFetchMode($fetchMode, $checkGlobal = false) : array
+    protected function processFetchMode($fetchMode, $checkGlobal = false): array
     {
-        $returnResources  = ($checkGlobal && $this->returningResources) || ($fetchMode & OCI8::RETURN_RESOURCES);
-        $returnCursors    = ($checkGlobal && $this->returningCursors)   || ($fetchMode & OCI8::RETURN_CURSORS);
-        $fetchMode       &= ~(OCI8::RETURN_RESOURCES+OCI8::RETURN_CURSORS); // Must unset the flags or there will be an error.
-        $fetchMode        = (int) ($fetchMode ?: $this->_defaultFetchMode);
+        $returnResources = ($checkGlobal && $this->returningResources) || ($fetchMode & OCI8::RETURN_RESOURCES);
+        $returnCursors = ($checkGlobal && $this->returningCursors) || ($fetchMode & OCI8::RETURN_CURSORS);
+        // Must unset the flags or there will be an error.
+        $fetchMode &= ~(OCI8::RETURN_RESOURCES + OCI8::RETURN_CURSORS);
+        $fetchMode = (int) ($fetchMode ?: $this->_defaultFetchMode);
 
         return [$fetchMode, $returnResources, $returnCursors];
+    }
+
+    protected function resetCursorFields(): void
+    {
+        $this->cursorFields = [];
+        $this->checkedForCursorFields = false;
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -14,36 +16,40 @@ namespace Doctrine\DBAL\Test\Driver\OCI8Ext;
 use Doctrine\DBAL\Driver\OCI8Ext\OCI8;
 use Doctrine\DBAL\Test\AbstractTestCase;
 use PDO;
+use const OCI_B_CURSOR;
+use const PHP_INT_MAX;
 
 /**
- * Class OCI8Test
+ * Class OCI8Test.
  *
- * @package Doctrine\DBAL\Driver\OCI8Ext\Test
  * @author  Jason Hofer <jason.hofer@gmail.com>
  * 2018-02-24 1:02 AM
+ *
+ * @internal
+ * @coversNothing
  */
-class OCI8Test extends AbstractTestCase
+final class OCI8Test extends AbstractTestCase
 {
-    public function testIsParamConstant() : void
+    public function testDecodeParamConstant(): void
     {
-        $this->assertTrue(OCI8::isParamConstant(OCI8::PARAM_CURSOR));
-
-        $this->assertFalse(OCI8::isParamConstant(0));
-        $this->assertFalse(OCI8::isParamConstant(1));
-        $this->assertFalse(OCI8::isParamConstant(PDO::PARAM_STMT));
-        $this->assertFalse(OCI8::isParamConstant(PHP_INT_MAX));
+        self::assertSame(OCI_B_CURSOR, OCI8::decodeParamConstant(OCI8::PARAM_CURSOR));
     }
 
-    public function testDecodeParamConstant() : void
+    public function testDecodeParamConstantReturnsGivenValueIfNotParamConstant(): void
     {
-        $this->assertSame(OCI_B_CURSOR, OCI8::decodeParamConstant(OCI8::PARAM_CURSOR));
+        self::assertSame(0, OCI8::decodeParamConstant(0));
+        self::assertSame(1, OCI8::decodeParamConstant(1));
+        self::assertSame(PDO::PARAM_STMT, OCI8::decodeParamConstant(PDO::PARAM_STMT));
+        self::assertSame(PHP_INT_MAX, OCI8::decodeParamConstant(PHP_INT_MAX));
     }
 
-    public function testDecodeParamConstantReturnsGivenValueIfNotParamConstant() : void
+    public function testIsParamConstant(): void
     {
-        $this->assertSame(0, OCI8::decodeParamConstant(0));
-        $this->assertSame(1, OCI8::decodeParamConstant(1));
-        $this->assertSame(PDO::PARAM_STMT, OCI8::decodeParamConstant(PDO::PARAM_STMT));
-        $this->assertSame(PHP_INT_MAX, OCI8::decodeParamConstant(PHP_INT_MAX));
+        self::assertTrue(OCI8::isParamConstant(OCI8::PARAM_CURSOR));
+
+        self::assertFalse(OCI8::isParamConstant(0));
+        self::assertFalse(OCI8::isParamConstant(1));
+        self::assertFalse(OCI8::isParamConstant(PDO::PARAM_STMT));
+        self::assertFalse(OCI8::isParamConstant(PHP_INT_MAX));
     }
 }

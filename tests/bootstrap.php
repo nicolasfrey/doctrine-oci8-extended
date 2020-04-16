@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -11,7 +13,7 @@
 
 use Symfony\Component\Dotenv\Dotenv;
 
-$autoloader = require __DIR__.'/../vendor/autoload.php';
+$autoloader = require __DIR__ . '/../vendor/autoload.php';
 
 $dotenv = new Dotenv();
-$dotenv->load(__DIR__.'/../.env');
+$dotenv->load(__DIR__ . '/../.env');

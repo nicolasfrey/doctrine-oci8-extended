@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -12,8 +14,8 @@
 namespace Doctrine\DBAL\Test;
 
 use Doctrine\DBAL;
-use PHPUnit_Framework_TestCase;
 use Doctrine\DBAL\Driver\OCI8Ext\Driver;
+use PHPUnit\Framework\TestCase;
 use ReflectionObject;
 use RuntimeException;
 use function getenv;
@@ -24,19 +26,16 @@ use function oci_error;
 use function oci_execute;
 use function oci_parse;
 use function sprintf;
-use function strpos;
-use function strrpos;
-use function strtoupper;
-use function substr;
 
 /**
- * Class AbstractTestCase
+ * Class AbstractTestCase.
  *
- * @package Doctrine\DBAL\Test
  * @author  Jason Hofer <jason.hofer@gmail.com>
  * 2018-02-23 4:26 PM
+ *
+ * @internal
  */
-abstract class AbstractTestCase extends PHPUnit_Framework_TestCase
+abstract class AbstractTestCase extends TestCase
 {
     /**
      * @var DBAL\Connection
@@ -49,22 +48,22 @@ abstract class AbstractTestCase extends PHPUnit_Framework_TestCase
     private $oci;
 
     /**
-     * @return DBAL\Connection
-     *
      * @throws DBAL\DBALException
+     *
+     * @return DBAL\Connection
      */
-    protected function getConnection() : DBAL\Connection
+    protected function getConnection(): DBAL\Connection
     {
         if ($this->connection) {
             return $this->connection;
         }
 
         $params = [
-            'user'        => getenv('DB_USER'),
-            'password'    => getenv('DB_PASSWORD'),
-            'host'        => getenv('DB_HOST'),
-            'port'        => getenv('DB_PORT'),
-            'dbname'      => getenv('DB_SCHEMA'),
+            'user' => getenv('DB_USER'),
+            'password' => getenv('DB_PASSWORD'),
+            'host' => getenv('DB_HOST'),
+            'port' => getenv('DB_PORT'),
+            'dbname' => getenv('DB_SCHEMA'),
             'driverClass' => Driver::class,
         ];
 
@@ -75,7 +74,7 @@ abstract class AbstractTestCase extends PHPUnit_Framework_TestCase
 
     protected function getPropertyValue($obj, $prop)
     {
-        $rObj  = new ReflectionObject($obj);
+        $rObj = new ReflectionObject($obj);
         $rProp = $rObj->getProperty($prop);
         $rProp->setAccessible(true);
 
@@ -84,7 +83,7 @@ abstract class AbstractTestCase extends PHPUnit_Framework_TestCase
 
     protected function invokeMethod($obj, $method, array $args = [])
     {
-        $rObj    = new ReflectionObject($obj);
+        $rObj = new ReflectionObject($obj);
         $rMethod = $rObj->getMethod($method);
         $rMethod->setAccessible(true);
 
@@ -94,7 +93,7 @@ abstract class AbstractTestCase extends PHPUnit_Framework_TestCase
     /**
      * @return OciWrapper
      */
-    protected function oci() : OciWrapper
+    protected function oci(): OciWrapper
     {
         return $this->oci ?: ($this->oci = new OciWrapper());
     }
@@ -104,6 +103,14 @@ abstract class AbstractTestCase extends PHPUnit_Framework_TestCase
 class OciWrapper
 {
     private $dbh;
+
+    public function close(): bool
+    {
+        $result = oci_close($this->dbh);
+        $this->dbh = null;
+
+        return $result;
+    }
 
     public function connect()
     {
@@ -115,26 +122,16 @@ class OciWrapper
                 getenv('DB_CHARSET'),
                 OCI_DEFAULT
             );
+
             if (!$this->dbh) {
                 /** @var array $m */
                 $m = oci_error();
+
                 throw new RuntimeException($m['message']);
             }
         }
 
         return $this->dbh;
-    }
-
-    public function parse($sql)
-    {
-        return oci_parse($this->connect(), $sql);
-    }
-
-    public function execute($sql)
-    {
-        $stmt = $this->parse($sql);
-
-        return oci_execute($stmt) ? $stmt : false;
     }
 
     public function createTable($name, array $columns)
@@ -145,30 +142,31 @@ class OciWrapper
     }
 
     /**
-     * https://stackoverflow.com/questions/1799128/oracle-if-table-exists
+     * https://stackoverflow.com/questions/1799128/oracle-if-table-exists.
      *
      * @param string $type
      * @param string $name
      *
      * @return bool
      */
-    public function drop($type, $name) : bool
+    public function drop($type, $name): bool
     {
         static $codes = [
-            'COLUMN'     => '-904',
-            'TABLE'      => '-942',
+            'COLUMN' => '-904',
+            'TABLE' => '-942',
             'CONSTRAINT' => '-2443',
-            'FUNCTION'   => '-4043',
-            'PACKAGE'    => '-4043',
-            'PROCEDURE'  => '-4043',
+            'FUNCTION' => '-4043',
+            'PACKAGE' => '-4043',
+            'PROCEDURE' => '-4043',
         ];
-        $type = strtoupper($type);
+        $type = mb_strtoupper($type);
         $code = $codes[$type];
-        if (false !== strpos('COLUMN CONSTRAINT', $type)) {
-            $pos    = strrpos($name, '.');
-            $table  = substr($name, 0, $pos);  // "PACKAGE_NAME.TABLE_NAME" or just "TABLE_NAME"
-            $column = substr($name, $pos + 1); // "COLUMN_NAME"
-            $query  = "ALTER TABLE {$table} DROP {$type} {$column}";
+
+        if (false !== mb_strpos('COLUMN CONSTRAINT', $type)) {
+            $pos = mb_strrpos($name, '.');
+            $table = mb_substr($name, 0, $pos);  // "PACKAGE_NAME.TABLE_NAME" or just "TABLE_NAME"
+            $column = mb_substr($name, $pos + 1); // "COLUMN_NAME"
+            $query = "ALTER TABLE {$table} DROP {$type} {$column}";
         } else {
             $query = "DROP {$type} {$name}";
         }
@@ -186,11 +184,15 @@ class OciWrapper
         return (bool) $this->execute($sql);
     }
 
-    public function close() : bool
+    public function execute($sql)
     {
-        $result    = oci_close($this->dbh);
-        $this->dbh = null;
+        $stmt = $this->parse($sql);
 
-        return $result;
+        return oci_execute($stmt) ? $stmt : false;
+    }
+
+    public function parse($sql)
+    {
+        return oci_parse($this->connect(), $sql);
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -14,9 +16,8 @@ namespace Doctrine\DBAL\Driver\OCI8Ext;
 use function oci_new_cursor;
 
 /**
- * Class OCI8Cursor
+ * Class OCI8Cursor.
  *
- * @package Doctrine\DBAL\Driver\OCI8Ext
  * @author  Jason Hofer <jason.hofer@gmail.com>
  * 2018-02-21 7:56 PM
  */
@@ -24,6 +25,7 @@ class OCI8Cursor extends OCI8Statement
 {
     /** @noinspection PhpMissingParentConstructorInspection */
     /** @noinspection MagicMethodsValidityInspection */
+
     /**
      * @param resource       $dbh
      * @param OCI8Connection $conn
@@ -33,8 +35,12 @@ class OCI8Cursor extends OCI8Statement
      */
     public function __construct($dbh, OCI8Connection $conn, $sth = null)
     {
-        $this->_dbh  = $dbh;
+        $this->_dbh = $dbh;
         $this->_conn = $conn;
-        $this->_sth  = $sth ?: oci_new_cursor($dbh);
+        $this->_sth = $sth;
+
+        if (null === $sth && false !== $alternative = oci_new_cursor($dbh)) {
+            $this->_sth = $alternative;
+        }
     }
 }
