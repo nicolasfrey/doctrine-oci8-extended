@@ -1,9 +1,5 @@
-/composer.lock
-/vendor
-/build
-/.php_cs.cache
-/example/
+/vendor/
 /.idea/
-/test.php
-/phpspec.yml
 /.env
+/test.php
+/composer.lock
