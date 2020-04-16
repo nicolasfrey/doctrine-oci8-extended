@@ -26,6 +26,7 @@ use function oci_error;
 use function oci_execute;
 use function oci_parse;
 use function sprintf;
+use const OCI_DEFAULT;
 
 /**
  * Class AbstractTestCase.
