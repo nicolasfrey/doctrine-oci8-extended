@@ -105,6 +105,20 @@ class OciWrapper
 {
     private $dbh;
 
+    public function __construct()
+    {
+        // Prevent OCI_SUCCESS_WITH_INFO: ORA-28002: the password will expire within 7 days
+        $this->execute('ALTER PROFILE DEFAULT LIMIT PASSWORD_LIFE_TIME UNLIMITED');
+
+        // We must change the password in order to take this in account.
+        oci_password_change(
+            $this->connect(),
+            getenv('DB_USER'),
+            getenv('DB_PASSWORD'),
+            getenv('DB_PASSWORD')
+        );
+    }
+
     public function close(): bool
     {
         $result = oci_close($this->dbh);
