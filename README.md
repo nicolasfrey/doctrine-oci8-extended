@@ -64,3 +64,15 @@ $rows = $stmt->fetchAll(\PDO::FETCH_BOTH+OCI8::RETURN_RESOURCES);
 ```
 
 *Special thanks to Michal Tichý for his patch.*
+
+# Tests
+
+In order to have a working development environment, tests are Docker based.
+
+To run the tests, do the following steps
+
+1. `cp .env.example .env`
+2. `docker-compose up -d`
+3. `docker-compose exec php ./vendor/bin/phpunit`
+4. `CTRL+C`
+5. `docker-compose down`
