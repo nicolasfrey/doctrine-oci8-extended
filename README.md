@@ -1,7 +1,7 @@
 Doctrine OCI8 Extended
 ======================
 
-The Doctrine OCI8 driver with cursor support.
+The Doctrine OCI8 driver with cursor support, for PHP 7.1+.
 
 Usage
 -----
@@ -62,3 +62,17 @@ use Doctrine\DBAL\Driver\OCI8Ext\OCI8;
 $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC+OCI8::RETURN_CURSORS);
 $rows = $stmt->fetchAll(\PDO::FETCH_BOTH+OCI8::RETURN_RESOURCES);
 ```
+
+*Special thanks to Michal Tichý for his patch.*
+
+# Tests
+
+In order to have a working development environment, tests are Docker based.
+
+To run the tests, do the following steps
+
+1. `cp .env.example .env`
+2. `docker-compose up -d`
+3. `docker-compose exec php ./vendor/bin/phpunit`
+4. `CTRL+C`
+5. `docker-compose down`

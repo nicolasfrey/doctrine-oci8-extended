@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -9,31 +11,26 @@
  * file that was distributed with this source code.
  */
 
-
 namespace Doctrine\DBAL\Types;
 
 use Doctrine\DBAL\Platforms\AbstractPlatform;
+use LogicException;
+use PDO;
 
 /**
- * Class CursorType
+ * Class CursorType.
  *
- * @package Doctrine\DBAL\Types
  * @author  Jason Hofer <jason.hofer@gmail.com>
  * 2018-02-24 9:15 AM
  */
 class CursorType extends Type
 {
     /**
-     * Gets the SQL declaration snippet for a field of this type.
-     *
-     * @param array                                     $fieldDeclaration The field declaration.
-     * @param \Doctrine\DBAL\Platforms\AbstractPlatform $platform         The currently used database platform.
-     *
-     * @throws \LogicException
+     * @return int
      */
-    public function getSQLDeclaration(array $fieldDeclaration, AbstractPlatform $platform)
+    public function getBindingType(): int
     {
-        throw new \LogicException('Doctrine does not support SQL declarations for cursors.');
+        return PDO::PARAM_STMT;
     }
 
     /**
@@ -41,16 +38,23 @@ class CursorType extends Type
      *
      * @return string
      */
-    public function getName()
+    public function getName(): string
     {
         return 'cursor';
     }
 
     /**
-     * @return int
+     * Gets the SQL declaration snippet for a field of this type.
+     *
+     * @param mixed[]                                   $fieldDeclaration The field declaration.
+     * @param \Doctrine\DBAL\Platforms\AbstractPlatform $platform         The currently used database platform.
+     *
+     * @throws LogicException
+     *
+     * @return string
      */
-    public function getBindingType()
+    public function getSQLDeclaration(array $fieldDeclaration, AbstractPlatform $platform)
     {
-        return \PDO::PARAM_STMT;
+        throw new LogicException('Doctrine does not support SQL declarations for cursors.');
     }
 }

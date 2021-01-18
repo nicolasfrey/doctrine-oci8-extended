@@ -1,0 +1,88 @@
+# https://help.github.com/en/categories/automating-your-workflow-with-github-actions
+
+on:
+    - pull_request
+    - push
+
+name: "Continuous Integration"
+
+jobs:
+    run:
+        name: "Grumphp"
+        runs-on: ${{ matrix.operating-system }}
+        strategy:
+            fail-fast: false
+            matrix:
+                operating-system: [ubuntu-latest]
+                php-versions: ['7.1', '7.2', '7.3', '7.4']
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@master
+              with:
+                  fetch-depth: 1
+
+            - name: Build the docker-compose stack
+              run: docker-compose up -d
+
+            - name: Create .env file
+              run: cp .env.example .env
+
+            - name: Install PHP
+              uses: shivammathur/setup-php@master
+              with:
+                  php-version: ${{ matrix.php-versions }}
+                  extensions: mbstring,xdebug
+                  tools: pecl
+
+            - name: Setup OCI8
+              run: |
+                sudo apt-get update -qq
+                sudo apt-get -y install -qq build-essential unzip wget libaio1
+
+                sudo mkdir -p /opt/oracle
+
+                wget https://github.com/bumpx/oracle-instantclient/raw/master/instantclient-basic-linux.x64-12.1.0.2.0.zip
+                wget https://github.com/bumpx/oracle-instantclient/raw/master/instantclient-sdk-linux.x64-12.1.0.2.0.zip
+
+                sudo unzip -o ./instantclient-basic-linux.x64-12.1.0.2.0.zip -d /opt/oracle
+                sudo unzip -o ./instantclient-sdk-linux.x64-12.1.0.2.0.zip -d /opt/oracle
+
+                sudo ln -s /opt/oracle/instantclient/sqlplus /usr/bin/sqlplus
+                sudo ln -s /opt/oracle/instantclient_12_1 /opt/oracle/instantclient
+                sudo ln -s /opt/oracle/instantclient/libclntsh.so.12.1 /opt/oracle/instantclient/libclntsh.so
+                sudo ln -s /opt/oracle/instantclient/libocci.so.12.1 /opt/oracle/instantclient/libocci.so
+
+                sudo sh -c "echo 'instantclient,/opt/oracle/instantclient' | pecl install oci8"
+
+                sudo sh -c "echo '/opt/oracle/instantclient' >> /etc/ld.so.conf"
+                sudo ldconfig
+
+            - name: Get Composer Cache Directory
+              id: composer-cache
+              run: echo "::set-output name=dir::$(composer config cache-files-dir)"
+
+            - name: Cache dependencies
+              uses: actions/cache@v1
+              with:
+                  path: ${{ steps.composer-cache.outputs.dir }}
+                  key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
+                  restore-keys: ${{ runner.os }}-composer-
+
+            - name: Install dependencies
+              run: composer install --no-progress --no-suggest --prefer-dist --optimize-autoloader
+
+            - name: Run Grumphp
+              run: vendor/bin/grumphp run --no-ansi -n
+              env:
+                  STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
+
+            - name: Send PSALM data
+              run: vendor/bin/psalm --shepherd --stats
+              continue-on-error: true
+
+            - name: Scrutinizer
+              run: |
+                  wget https://scrutinizer-ci.com/ocular.phar
+                  php ocular.phar code-coverage:upload --format=php-clover build/logs/clover.xml
+              continue-on-error: true

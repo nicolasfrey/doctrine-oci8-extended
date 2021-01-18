@@ -1,0 +1,6 @@
+imports:
+  - { resource: vendor/drupol/php-conventions/config/php71/grumphp.yml }
+
+parameters:
+  extra_tasks:
+    phpunit: ~

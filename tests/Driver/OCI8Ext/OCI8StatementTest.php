@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * This file is part of the doctrine-oci8-extended package.
  *
@@ -9,126 +11,157 @@
  * file that was distributed with this source code.
  */
 
-/* @noinspection PhpUnhandledExceptionInspection */
+/** @noinspection PhpUnhandledExceptionInspection */
 
 namespace Doctrine\DBAL\Test\Driver\OCI8Ext;
 
 use Doctrine\DBAL\Driver\OCI8Ext\OCI8;
+use Doctrine\DBAL\Driver\OCI8Ext\OCI8Cursor;
 use Doctrine\DBAL\Test\AbstractTestCase;
+use Doctrine\DBAL\Test\OciWrapper;
+use LogicException;
+use PDO;
+use function sprintf;
 
 /**
- * Class OCI8StatementTest
+ * Class OCI8StatementTest.
  *
- * @package Doctrine\DBAL\Driver\OCI8Ext\Test
  * @author  Jason Hofer <jason.hofer@gmail.com>
  * 2018-02-23 4:51 PM
+ *
+ * @internal
+ * @coversNothing
  */
-class OCI8StatementTest extends AbstractTestCase
+final class OCI8StatementTest extends AbstractTestCase
 {
-    public static function setUpBeforeClass()
+    protected static $employees = [
+        ['FIRST_NAME' => 'John'],
+        ['FIRST_NAME' => 'Jane'],
+        ['FIRST_NAME' => 'George'],
+        ['FIRST_NAME' => 'Albert'],
+    ];
+
+    public static function setUpBeforeClass(): void
     {
+        $oci = new OciWrapper();
+        self::setupEmployeesTable($oci);
+        self::setupArrayBindPackage($oci);
+        $oci->close();
     }
 
-    /**
-     * @expectedException \LogicException
-     */
-    public function testBindValueThrowsExceptionWhenTypeIsCursor()
+    public static function tearDownAfterClass(): void
     {
-        $stmt   = $this->getConnection()->prepare('BEGIN MOCK_PROC(:cursor); END;');
-        $cursor = null;
-
-        $stmt->bindValue('cursor', $cursor, 'cursor');
+        $oci = new OciWrapper();
+        self::tearDownEmployeesTable($oci);
+        self::tearDownArrayBindPackage($oci);
+        $oci->close();
     }
 
-    /**
-     * @expectedException \LogicException
-     */
-    public function testBindValueThrowsExceptionWhenTypeIsOciCursor()
+    public function testBindArrayByName(): void
     {
-        $stmt   = $this->getConnection()->prepare('BEGIN MOCK_PROC(:cursor); END;');
-        $cursor = null;
+        $conn = $this->getConnection();
+        $stmt = $conn->prepare('BEGIN ARRAY_BIND_PKG_1.IO_BIND(:c1); END;');
+        $array = ['one', 'two', 'three', 'four', 'five'];
+        $stmt->bindParam('c1', $array);
+        $stmt->execute();
 
-        $stmt->bindValue('cursor', $cursor, OCI8::PARAM_CURSOR);
+        self::assertSame(['five', 'four', 'three', 'two', 'one'], $array);
     }
 
-    /**
-     * @expectedException \LogicException
-     */
-    public function testBindValueThrowsExceptionWhenTypeIsPdoStmt()
-    {
-        $stmt   = $this->getConnection()->prepare('BEGIN MOCK_PROC(:cursor); END;');
-        $cursor = null;
-
-        $stmt->bindValue('cursor', $cursor, \PDO::PARAM_STMT);
-    }
-
-    public function testBindParamSetsOci8Cursor()
+    public function testBindParamSetsOci8Cursor(): void
     {
         $stmt = $this->getConnection()->prepare('BEGIN MOCK_PROC(:cursor1, :cursor2, :cursor3); END;');
 
         $stmt->bindParam('cursor1', $cursor1, 'cursor');
         $stmt->bindParam('cursor2', $cursor2, OCI8::PARAM_CURSOR);
-        $stmt->bindParam('cursor3', $cursor3, \PDO::PARAM_STMT);
+        $stmt->bindParam('cursor3', $cursor3, PDO::PARAM_STMT);
 
-        $this->assertInstanceOf('Doctrine\DBAL\Driver\OCI8Ext\OCI8Cursor', $cursor1);
-        $this->assertInstanceOf('Doctrine\DBAL\Driver\OCI8Ext\OCI8Cursor', $cursor2);
-        $this->assertInstanceOf('Doctrine\DBAL\Driver\OCI8Ext\OCI8Cursor', $cursor3);
+        self::assertInstanceOf(OCI8Cursor::class, $cursor1);
+        self::assertInstanceOf(OCI8Cursor::class, $cursor2);
+        self::assertInstanceOf(OCI8Cursor::class, $cursor3);
     }
 
-    public function testCursor()
+    public function testBindValueThrowsExceptionWhenTypeIsCursor(): void
     {
-        $this->oci()->drop('procedure', 'FIRST_NAMES');
-        $this->oci()->drop('table', 'employees');
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('You must call "bindParam()" to bind a cursor.');
 
-        $expected = array(
-            array('FIRST_NAME' => 'John'),
-            array('FIRST_NAME' => 'Jane'),
-            array('FIRST_NAME' => 'George'),
-            array('FIRST_NAME' => 'Albert'),
-        );
+        $stmt = $this->getConnection()->prepare('BEGIN MOCK_PROC(:cursor); END;');
+        $cursor = null;
 
-        $this->oci()->execute('CREATE TABLE employees ( first_name VARCHAR(20) )');
+        $stmt->bindValue('cursor', $cursor, 'cursor');
+    }
 
-        foreach ($expected as $emp) {
-            $this->oci()->execute(sprintf('INSERT INTO employees (first_name) VALUES (\'%s\')', $emp['FIRST_NAME']));
-        }
-        $this->oci()->execute('
-            CREATE OR REPLACE PROCEDURE FIRST_NAMES(my_rc OUT sys_refcursor) AS
-            BEGIN
-                OPEN my_rc FOR SELECT first_name FROM employees;
-            END;
-        ');
-        $this->oci()->close();
+    public function testBindValueThrowsExceptionWhenTypeIsOciCursor(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('You must call "bindParam()" to bind a cursor.');
 
+        $stmt = $this->getConnection()->prepare('BEGIN MOCK_PROC(:cursor); END;');
+        $cursor = null;
+
+        $stmt->bindValue('cursor', $cursor, OCI8::PARAM_CURSOR);
+    }
+
+    public function testBindValueThrowsExceptionWhenTypeIsPdoStmt(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('You must call "bindParam()" to bind a cursor.');
+
+        $stmt = $this->getConnection()->prepare('BEGIN MOCK_PROC(:cursor); END;');
+        $cursor = null;
+
+        $stmt->bindValue('cursor', $cursor, PDO::PARAM_STMT);
+    }
+
+    public function testCursorFetchAll(): void
+    {
         $conn = $this->getConnection();
         $stmt = $conn->prepare('BEGIN FIRST_NAMES(:cursor); END;');
 
-        /** @var $cursor \Doctrine\DBAL\Driver\OCI8Ext\OCI8Cursor */
+        /** @var OCI8Cursor $cursor */
         $stmt->bindParam('cursor', $cursor, 'cursor');
         $stmt->execute();
         $cursor->execute();
 
-        $results = $cursor->fetchAll(\PDO::FETCH_ASSOC);
+        $results = $cursor->fetchAll(PDO::FETCH_ASSOC);
 
-        $this->assertSame($expected, $results);
-
-        $this->oci()->drop('procedure', 'FIRST_NAMES');
-        $this->oci()->drop('table', 'employees');
+        self::assertSame(self::$employees, $results);
     }
 
-    public function testBindArrayByName()
+    public function testCursorFetchColumn(): void
     {
-        $this->oci()->drop('package', 'ARRAY_BIND_PKG_1');
-        $this->oci()->drop('table', 'bind_example');
+        $conn = $this->getConnection();
+        $stmt = $conn->prepare('BEGIN FIRST_NAMES(:cursor); END;');
 
-        $this->oci()->execute('CREATE TABLE bind_example ( name VARCHAR(20) )');
-        $this->oci()->execute('
+        /** @var OCI8Cursor $cursor */
+        $stmt->bindParam('cursor', $cursor, 'cursor');
+        $stmt->execute();
+        $cursor->execute();
+
+        $results = [];
+
+        while (false !== ($columnValue = $cursor->fetchColumn())) {
+            $results[] = $columnValue;
+        }
+
+        self::assertSame(array_column(self::$employees, 'FIRST_NAME'), $results);
+    }
+
+    protected static function setupArrayBindPackage(OciWrapper $oci): void
+    {
+        self::tearDownArrayBindPackage($oci);
+
+        $oci->execute('CREATE TABLE bind_example ( name VARCHAR(20) )');
+        $oci->execute(
+            '
             CREATE OR REPLACE PACKAGE ARRAY_BIND_PKG_1 AS
                 TYPE ARR_TYPE IS TABLE OF VARCHAR(20) INDEX BY BINARY_INTEGER;
                 PROCEDURE IO_BIND(c1 IN OUT ARR_TYPE);
             END ARRAY_BIND_PKG_1;'
         );
-        $this->oci()->execute('
+        $oci->execute(
+            '
             CREATE OR REPLACE PACKAGE BODY ARRAY_BIND_PKG_1 AS
                 CURSOR CUR IS SELECT name FROM bind_example;
                 PROCEDURE IO_BIND(c1 IN OUT ARR_TYPE) IS
@@ -150,17 +183,38 @@ class OCI8StatementTest extends AbstractTestCase
                 END IO_BIND;
             END ARRAY_BIND_PKG_1;'
         );
-        $this->oci()->close();
+    }
 
-        $conn  = $this->getConnection();
-        $stmt  = $conn->prepare('BEGIN ARRAY_BIND_PKG_1.IO_BIND(:c1); END;');
-        $array = array('one', 'two', 'three', 'four', 'five');
-        $stmt->bindParam('c1', $array);
-        $stmt->execute();
+    //
+    // Setup and tear-down methods.
+    //
 
-        $this->assertSame(array('five', 'four', 'three', 'two', 'one'), $array);
+    protected static function setupEmployeesTable(OciWrapper $oci): void
+    {
+        self::tearDownEmployeesTable($oci);
 
-        $this->oci()->drop('package', 'ARRAY_BIND_PKG_1');
-        $this->oci()->drop('table', 'bind_example');
+        $oci->execute('CREATE TABLE employees ( first_name VARCHAR(20) )');
+
+        foreach (self::$employees as $emp) {
+            $oci->execute(sprintf('INSERT INTO employees (first_name) VALUES (\'%s\')', $emp['FIRST_NAME']));
+        }
+        $oci->execute('
+            CREATE OR REPLACE PROCEDURE FIRST_NAMES(my_rc OUT sys_refcursor) AS
+            BEGIN
+                OPEN my_rc FOR SELECT first_name FROM employees;
+            END;
+        ');
+    }
+
+    protected static function tearDownArrayBindPackage(OciWrapper $oci): void
+    {
+        $oci->drop('package', 'ARRAY_BIND_PKG_1');
+        $oci->drop('table', 'bind_example');
+    }
+
+    protected static function tearDownEmployeesTable(OciWrapper $oci): void
+    {
+        $oci->drop('procedure', 'FIRST_NAMES');
+        $oci->drop('table', 'employees');
     }
 }
